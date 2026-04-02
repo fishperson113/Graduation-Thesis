@@ -15,6 +15,18 @@ class Settings(BaseSettings):
     neo4j_database: str = "neo4j"
     log_level: str = "INFO"
 
+    # Embedding model
+    embedding_model: str = "all-mpnet-base-v2"
+    embedding_dim: int = 768
+
+    # GAM-RAG constants
+    r_pos: float = 0.5
+    r_neg: float = 1.0
+    q_task: float = 0.05
+    q_time: float = 0.05
+    pi_init: float = 1.0
+    time_decay_rate: float = 0.02  # perplexity increase per day of absence
+
 
 @lru_cache
 def get_settings() -> Settings:

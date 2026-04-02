@@ -5,12 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "student-modeling"
 version = "0.1.0"
-description = "Graph-based student modeling with Neo4j"
+description = "Graph-based student modeling with Neo4j and GAM-RAG update policy"
 requires-python = ">=3.10"
 dependencies = [
     "neo4j>=5.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
+    "sentence-transformers>=2.0",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
