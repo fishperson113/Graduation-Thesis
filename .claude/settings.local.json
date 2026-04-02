@@ -4,7 +4,15 @@
       "WebFetch(domain:neo4j.com)",
       "Bash(pip show:*)",
       "Bash(pip install:*)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(find /c/workspace/StudentModeling -type f -not -path */__pycache__/* -not -path */.git/* -not -path */.pytest_cache/* -not -path */.ruff_cache/* -not -name *.pyc)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(printf:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(> src/student_modeling/models/__init__.py)",
+      "Bash(> src/student_modeling/repositories/__init__.py)",
+      "Bash(> src/student_modeling/services/__init__.py)"
     ]
   }
 }

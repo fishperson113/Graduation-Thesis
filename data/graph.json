@@ -1,0 +1,101 @@
+{
+  "course_name": "IT & Software Development",
+  "version": "1.0",
+  "knowledge_tree": [
+    {
+      "node_id": "DOM_01",
+      "name": "Foundations & Pioneers",
+      "parent_id": null,
+      "skills": [
+        {
+          "skill_id": "SKILL_01_01",
+          "name": "Early Computing & Cryptography",
+          "prerequisites": [],
+          "questions": ["q_021", "q_024", "q_078"]
+        },
+        {
+          "skill_id": "SKILL_01_02",
+          "name": "Programming Pioneers",
+          "prerequisites": ["SKILL_01_01"],
+          "questions": ["q_002", "q_060", "q_115"]
+        }
+      ]
+    },
+    {
+      "node_id": "DOM_02",
+      "name": "Systems & Hardware Architecture",
+      "parent_id": null,
+      "skills": [
+        {
+          "skill_id": "SKILL_02_01",
+          "name": "Microprocessors & Architectures",
+          "prerequisites": [],
+          "questions": ["q_061", "q_099", "q_132"]
+        },
+        {
+          "skill_id": "SKILL_02_02",
+          "name": "Display & Storage Standards",
+          "prerequisites": [],
+          "questions": ["q_075", "q_088"]
+        }
+      ]
+    },
+    {
+      "node_id": "DOM_03",
+      "name": "Software, OS & Environments",
+      "parent_id": "DOM_02",
+      "skills": [
+        {
+          "skill_id": "SKILL_03_01",
+          "name": "Operating Systems & GUIs",
+          "prerequisites": ["SKILL_02_01"],
+          "questions": ["q_105", "q_111", "q_142"]
+        },
+        {
+          "skill_id": "SKILL_03_02",
+          "name": "Software Distribution & DRM",
+          "prerequisites": [],
+          "questions": ["q_033", "q_072", "q_095"]
+        }
+      ]
+    },
+    {
+      "node_id": "DOM_04",
+      "name": "Networking & Security",
+      "parent_id": "DOM_03",
+      "skills": [
+        {
+          "skill_id": "SKILL_04_01",
+          "name": "Network Protocols & Infrastructure",
+          "prerequisites": ["SKILL_03_01"],
+          "questions": ["q_042", "q_055", "q_118"]
+        },
+        {
+          "skill_id": "SKILL_04_02",
+          "name": "Cybersecurity & Fraud",
+          "prerequisites": ["SKILL_04_01"],
+          "questions": ["q_083", "q_121"]
+        }
+      ]
+    },
+    {
+      "node_id": "DOM_05",
+      "name": "Business Ecosystems & Industry Trends",
+      "parent_id": null,
+      "skills": [
+        {
+          "skill_id": "SKILL_05_01",
+          "name": "Tech Corporations & Acquisitions",
+          "prerequisites": [],
+          "questions": ["q_006", "q_028", "q_068"]
+        },
+        {
+          "skill_id": "SKILL_05_02",
+          "name": "Enterprise Management Systems",
+          "prerequisites": ["SKILL_03_02"],
+          "questions": ["q_052", "q_089"]
+        }
+      ]
+    }
+  ]
+}
