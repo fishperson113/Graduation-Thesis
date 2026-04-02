@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from student_modeling.engine.kalman import (
@@ -9,7 +10,6 @@ from student_modeling.engine.kalman import (
     update_memory,
     update_perplexity,
 )
-import numpy as np
 
 
 class TestComputeGain:

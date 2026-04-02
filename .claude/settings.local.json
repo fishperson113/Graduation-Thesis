@@ -12,7 +12,9 @@
       "Bash(git commit -m ':*)",
       "Bash(> src/student_modeling/models/__init__.py)",
       "Bash(> src/student_modeling/repositories/__init__.py)",
-      "Bash(> src/student_modeling/services/__init__.py)"
+      "Bash(> src/student_modeling/services/__init__.py)",
+      "Bash(python:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
