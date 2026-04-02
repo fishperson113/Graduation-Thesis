@@ -10,6 +10,234 @@
 
 **Design Spec:** `docs/superpowers/specs/2026-04-02-gam-rag-student-modeling-design.md`
 
+**Environment:** All development, testing, and debugging runs inside Docker containers. The app container uses a Python venv and mounts the source code for live editing. Never install dependencies or run tests directly on the host machine.
+
+---
+
+## Task 0: Docker Environment and Venv Setup
+
+**Files:**
+- Modify: `docker-compose.yml`
+- Create: `Dockerfile`
+- Create: `scripts/entrypoint.sh`
+- Modify: `.gitignore`
+- Modify: `.env.example`
+
+- [ ] **Step 1: Create the app Dockerfile**
+
+Create `Dockerfile`:
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# System deps for building numpy/scipy wheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create venv inside the container
+RUN python -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install deps first (layer caching)
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e ".[dev]"
+
+# Source code mounted at runtime via docker-compose volume
+COPY . .
+
+# Re-install in editable mode with source present
+RUN pip install --no-cache-dir -e ".[dev]"
+```
+
+- [ ] **Step 2: Create entrypoint script**
+
+Create `scripts/entrypoint.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+# Activate venv
+source /app/.venv/bin/activate
+
+# Re-install in editable mode if pyproject.toml changed
+pip install --no-cache-dir -q -e ".[dev]"
+
+exec "$@"
+```
+
+Then make it executable:
+
+```bash
+chmod +x scripts/entrypoint.sh
+```
+
+- [ ] **Step 3: Update docker-compose.yml**
+
+Replace the entire `docker-compose.yml`:
+
+```yaml
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: student-modeling-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/changeme
+      NEO4J_PLUGINS: '[]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - student-modeling
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: student-modeling-app
+    entrypoint: ["bash", "scripts/entrypoint.sh"]
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    working_dir: /app
+    volumes:
+      - .:/app
+      - venv_data:/app/.venv
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      NEO4J_URI: neo4j://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: changeme
+      NEO4J_DATABASE: neo4j
+      LOG_LEVEL: INFO
+      HF_HOME: /root/.cache/huggingface
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - student-modeling
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  venv_data:
+  hf_cache:
+
+networks:
+  student-modeling:
+    driver: bridge
+```
+
+Key design decisions:
+- **Source mount** (`.:/app`): Edit code on host, changes are live inside container.
+- **venv volume** (`venv_data:/app/.venv`): Persists installed packages across container restarts — no reinstalling every time.
+- **HuggingFace cache volume** (`hf_cache`): Persists the `all-mpnet-base-v2` model download — avoids re-downloading on every container restart.
+- **Network**: `neo4j://neo4j:7687` — app connects to Neo4j via Docker DNS, not `localhost`.
+
+- [ ] **Step 4: Update .env.example with container-aware values**
+
+Replace `.env.example`:
+
+```
+# Neo4j connection (use "neo4j" hostname inside Docker, "localhost" on host)
+NEO4J_URI=neo4j://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=changeme
+NEO4J_DATABASE=neo4j
+LOG_LEVEL=INFO
+
+# Embedding model
+EMBEDDING_MODEL=all-mpnet-base-v2
+EMBEDDING_DIM=768
+
+# GAM-RAG update policy
+R_POS=0.5
+R_NEG=1.0
+Q_TASK=0.05
+Q_TIME=0.05
+PI_INIT=1.0
+TIME_DECAY_RATE=0.02
+```
+
+- [ ] **Step 5: Update .gitignore**
+
+Add at the end of `.gitignore`:
+
+```
+# Docker
+.venv/
+```
+
+(Already present — verify no new exclusions needed.)
+
+- [ ] **Step 6: Build and verify the environment**
+
+```bash
+docker compose build app
+```
+
+Expected: Successful build, venv created, base deps installed.
+
+- [ ] **Step 7: Start the full stack**
+
+```bash
+docker compose up -d
+```
+
+Expected: Both `student-modeling-neo4j` and `student-modeling-app` containers running. Neo4j healthy.
+
+- [ ] **Step 8: Verify connectivity from app container**
+
+```bash
+docker compose exec app python -c "
+from neo4j import GraphDatabase
+d = GraphDatabase.driver('neo4j://neo4j:7687', auth=('neo4j', 'changeme'))
+d.verify_connectivity()
+print('Neo4j connected')
+d.close()
+"
+```
+
+Expected: `Neo4j connected`
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add Dockerfile docker-compose.yml scripts/entrypoint.sh .env.example .gitignore
+git commit -m "feat: add Docker environment with app container, venv, and HF cache volumes"
+```
+
+---
+
+### Development Workflow (Reference)
+
+All subsequent tasks use these commands instead of running directly on the host:
+
+| Action | Command |
+|--------|---------|
+| **Run tests** | `docker compose exec app pytest tests/ -v` |
+| **Run specific test** | `docker compose exec app pytest tests/engine/test_kalman.py -v` |
+| **Install new deps** | `docker compose exec app pip install -e ".[dev]"` |
+| **Python REPL** | `docker compose exec app python` |
+| **Lint** | `docker compose exec app ruff check src/ tests/` |
+| **Shell into container** | `docker compose exec app bash` |
+| **Rebuild after Dockerfile change** | `docker compose build app && docker compose up -d` |
+| **View Neo4j browser** | Open `http://localhost:7474` on host |
+| **View logs** | `docker compose logs -f app` |
+
+The source code is mounted from the host, so you edit files normally in your IDE — changes are reflected immediately inside the container. No rebuild needed for code changes, only for dependency changes to `pyproject.toml`.
+
 ---
 
 ## Task 1: Update Dependencies and Config
@@ -94,8 +322,8 @@ TIME_DECAY_RATE=0.02
 
 - [ ] **Step 4: Install updated dependencies**
 
-Run: `pip install -e ".[dev]"`
-Expected: Successful install including sentence-transformers and numpy.
+Run: `docker compose exec app pip install -e ".[dev]"`
+Expected: Successful install including sentence-transformers and numpy inside the container.
 
 - [ ] **Step 5: Commit**
 
@@ -240,7 +468,7 @@ class TestComputeGain:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_kalman.py::TestComputeGain -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestComputeGain -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'student_modeling.engine.kalman'`
 
 - [ ] **Step 3: Implement compute_gain**
@@ -266,7 +494,7 @@ def compute_gain(pi: float, R: float) -> float:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/engine/test_kalman.py::TestComputeGain -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestComputeGain -v`
 Expected: 4 passed
 
 - [ ] **Step 5: Write failing tests for compute_residual**
@@ -307,7 +535,7 @@ class TestComputeResidual:
 
 - [ ] **Step 6: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_kalman.py::TestComputeResidual -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestComputeResidual -v`
 Expected: FAIL with `ImportError` (compute_residual not yet defined)
 
 - [ ] **Step 7: Implement compute_residual**
@@ -327,7 +555,7 @@ def compute_residual(y: int, query_emb: np.ndarray, memory_vec: np.ndarray) -> f
 
 - [ ] **Step 8: Run tests to verify they pass**
 
-Run: `pytest tests/engine/test_kalman.py::TestComputeResidual -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestComputeResidual -v`
 Expected: 3 passed
 
 - [ ] **Step 9: Write failing tests for update_memory**
@@ -371,7 +599,7 @@ class TestUpdateMemory:
 
 - [ ] **Step 10: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_kalman.py::TestUpdateMemory -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestUpdateMemory -v`
 Expected: FAIL
 
 - [ ] **Step 11: Implement update_memory**
@@ -396,7 +624,7 @@ def update_memory(
 
 - [ ] **Step 12: Run tests to verify they pass**
 
-Run: `pytest tests/engine/test_kalman.py::TestUpdateMemory -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py::TestUpdateMemory -v`
 Expected: 3 passed
 
 - [ ] **Step 13: Write failing tests for update_perplexity and compute_time_decay**
@@ -448,7 +676,7 @@ class TestComputeTimeDecay:
 
 - [ ] **Step 14: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_kalman.py -k "TestUpdatePerplexity or TestComputeTimeDecay" -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py -k "TestUpdatePerplexity or TestComputeTimeDecay" -v`
 Expected: FAIL
 
 - [ ] **Step 15: Implement update_perplexity and compute_time_decay**
@@ -476,7 +704,7 @@ def compute_time_decay(pi: float, days_elapsed: float, decay_rate: float) -> flo
 
 - [ ] **Step 16: Run all kalman tests**
 
-Run: `pytest tests/engine/test_kalman.py -v`
+Run: `docker compose exec app pytest tests/engine/test_kalman.py -v`
 Expected: All 14 tests pass
 
 - [ ] **Step 17: Commit**
@@ -579,7 +807,7 @@ class TestDeriveMastery:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_memory.py -k "TestInitializeKnowsEdge or TestDeriveMastery" -v`
+Run: `docker compose exec app pytest tests/engine/test_memory.py -k "TestInitializeKnowsEdge or TestDeriveMastery" -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement initialize_knows_edge and derive_mastery**
@@ -645,7 +873,7 @@ def derive_mastery(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/engine/test_memory.py -k "TestInitializeKnowsEdge or TestDeriveMastery" -v`
+Run: `docker compose exec app pytest tests/engine/test_memory.py -k "TestInitializeKnowsEdge or TestDeriveMastery" -v`
 Expected: 7 passed
 
 - [ ] **Step 5: Write failing tests for process_feedback — theory validation**
@@ -791,7 +1019,7 @@ class TestProcessFeedback:
 
 - [ ] **Step 6: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_memory.py::TestProcessFeedback -v`
+Run: `docker compose exec app pytest tests/engine/test_memory.py::TestProcessFeedback -v`
 Expected: FAIL (process_feedback not yet implemented)
 
 - [ ] **Step 7: Implement process_feedback**
@@ -870,7 +1098,7 @@ def process_feedback(
 
 - [ ] **Step 8: Run all memory tests**
 
-Run: `pytest tests/engine/test_memory.py -v`
+Run: `docker compose exec app pytest tests/engine/test_memory.py -v`
 Expected: All 13 tests pass
 
 - [ ] **Step 9: Commit**
@@ -931,7 +1159,7 @@ class TestEmbeddingService:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/engine/test_embeddings.py -v`
+Run: `docker compose exec app pytest tests/engine/test_embeddings.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement EmbeddingService**
@@ -968,7 +1196,7 @@ class EmbeddingService:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/engine/test_embeddings.py -v`
+Run: `docker compose exec app pytest tests/engine/test_embeddings.py -v`
 Expected: 4 passed (first run may be slow due to model download)
 
 - [ ] **Step 5: Commit**
@@ -1227,7 +1455,7 @@ __all__ = ["Concept", "Domain", "KnowsEdge", "LearningObject", "User"]
 
 - [ ] **Step 7: Verify imports work**
 
-Run: `python -c "from student_modeling.models import Concept, Domain, KnowsEdge, LearningObject, User; print('OK')"`
+Run: `docker compose exec app python -c "from student_modeling.models import Concept, Domain, KnowsEdge, LearningObject, User; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 8: Commit**
@@ -1290,7 +1518,7 @@ class TestUserRepository:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/repositories/test_user_repository.py -v`
+Run: `docker compose exec app pytest tests/repositories/test_user_repository.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement UserRepository**
@@ -1363,7 +1591,7 @@ class UserRepository(BaseRepository):
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/repositories/test_user_repository.py -v`
+Run: `docker compose exec app pytest tests/repositories/test_user_repository.py -v`
 Expected: 4 passed
 
 - [ ] **Step 5: Implement DomainRepository**
@@ -1860,7 +2088,7 @@ class TestKnowsRepository:
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `pytest tests/repositories/test_knows_repository.py -v`
+Run: `docker compose exec app pytest tests/repositories/test_knows_repository.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 4: Implement KnowsRepository**
@@ -1983,7 +2211,7 @@ class KnowsRepository:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `pytest tests/repositories/test_knows_repository.py -v`
+Run: `docker compose exec app pytest tests/repositories/test_knows_repository.py -v`
 Expected: 6 passed
 
 - [ ] **Step 6: Update repositories __init__.py**
@@ -2097,7 +2325,7 @@ class TestDataLoader:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/services/test_data_loader.py -v`
+Run: `docker compose exec app pytest tests/services/test_data_loader.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement DataLoader**
@@ -2248,7 +2476,7 @@ class DataLoader:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/services/test_data_loader.py -v`
+Run: `docker compose exec app pytest tests/services/test_data_loader.py -v`
 Expected: 3 passed
 
 - [ ] **Step 5: Commit**
@@ -2374,7 +2602,7 @@ class TestModelingService:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/services/test_modeling_service.py -v`
+Run: `docker compose exec app pytest tests/services/test_modeling_service.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement ModelingService**
@@ -2528,7 +2756,7 @@ class ModelingService:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/services/test_modeling_service.py -v`
+Run: `docker compose exec app pytest tests/services/test_modeling_service.py -v`
 Expected: 5 passed
 
 - [ ] **Step 5: Update services __init__.py**
@@ -2639,12 +2867,12 @@ __all__ = [
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `pytest tests/ -v`
+Run: `docker compose exec app pytest tests/ -v`
 Expected: All tests pass (engine tests ~14, memory tests ~13, embedding tests ~4, repository tests ~10, service tests ~8)
 
 - [ ] **Step 3: Run linter**
 
-Run: `ruff check src/ tests/`
+Run: `docker compose exec app ruff check src/ tests/`
 Expected: No errors. Fix any issues if found.
 
 - [ ] **Step 4: Commit final cleanup**
@@ -2660,7 +2888,8 @@ git commit -m "feat: complete GAM-RAG student modeling implementation"
 
 | Task | What It Builds | Key Test |
 |------|---------------|----------|
-| 1 | Dependencies + config | Install check |
+| 0 | Docker + venv environment | `docker compose exec app` connectivity |
+| 1 | Dependencies + config | Install check inside container |
 | 2 | Remove old scaffold | Clean slate |
 | 3 | `engine/kalman.py` | Gain, residual, perplexity math |
 | 4 | `engine/memory.py` | Warm-up, damped refinement, forgetting, recovery |
