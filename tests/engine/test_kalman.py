@@ -142,3 +142,34 @@ class TestComputeTimeDecay:
         """Perplexity cannot exceed 1.0."""
         pi = compute_time_decay(pi=0.9, days_elapsed=100.0, decay_rate=0.02)
         assert pi == 1.0
+
+
+class TestUpdateMemoryEdgeCases:
+    def test_zero_gain_no_change(self):
+        """K=0 should leave memory unchanged."""
+        rng = np.random.default_rng(42)
+        m = rng.standard_normal(768).astype(np.float32)
+        m /= np.linalg.norm(m)
+        q = rng.standard_normal(768).astype(np.float32)
+        q /= np.linalg.norm(q)
+        m_new = update_memory(m_old=m, K=0.0, e=1.0, query_emb=q)
+        np.testing.assert_allclose(m_new, m, atol=1e-6)
+
+    def test_zero_residual_no_change(self):
+        """e=0 should leave memory unchanged."""
+        rng = np.random.default_rng(42)
+        m = rng.standard_normal(768).astype(np.float32)
+        m /= np.linalg.norm(m)
+        q = rng.standard_normal(768).astype(np.float32)
+        q /= np.linalg.norm(q)
+        m_new = update_memory(m_old=m, K=0.5, e=0.0, query_emb=q)
+        np.testing.assert_allclose(m_new, m, atol=1e-6)
+
+    def test_near_cancellation_returns_old(self):
+        """When m + K*e*q ~ 0, fallback to m_old (zero-vector guard)."""
+        m = np.zeros(768, dtype=np.float32)
+        m[0] = 1.0
+        q = -m.copy()
+        # K*e*q = 1.0 * 1.0 * (-m) = -m, so m + K*e*q = 0
+        m_new = update_memory(m_old=m, K=1.0, e=1.0, query_emb=q)
+        np.testing.assert_allclose(m_new, m, atol=1e-6)

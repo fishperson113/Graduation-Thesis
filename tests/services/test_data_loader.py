@@ -12,7 +12,11 @@ from student_modeling.services.data_loader import DataLoader
 class TestDataLoader:
     @pytest.fixture(scope="class")
     def embedding_service(self):
-        return EmbeddingService(model_name="all-mpnet-base-v2")
+        from student_modeling.config import get_settings
+
+        settings = get_settings()
+        api_key = settings.huggingface_api_key.get_secret_value()
+        return EmbeddingService(api_key=api_key)
 
     @pytest.fixture
     def loader(self, neo4j_driver, database_name, embedding_service):

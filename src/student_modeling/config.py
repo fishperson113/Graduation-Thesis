@@ -7,7 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     neo4j_uri: str = "neo4j://localhost:7687"
     neo4j_user: str = "neo4j"
@@ -15,8 +17,11 @@ class Settings(BaseSettings):
     neo4j_database: str = "neo4j"
     log_level: str = "INFO"
 
+    # HuggingFace Inference API
+    huggingface_api_key: SecretStr | None = None
+
     # Embedding model
-    embedding_model: str = "all-mpnet-base-v2"
+    embedding_model: str = "sentence-transformers/all-mpnet-base-v2"
     embedding_dim: int = 768
 
     # GAM-RAG constants

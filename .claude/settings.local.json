@@ -14,7 +14,8 @@
       "Bash(> src/student_modeling/repositories/__init__.py)",
       "Bash(> src/student_modeling/services/__init__.py)",
       "Bash(python:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx gitnexus:*)"
     ]
   }
 }

@@ -97,11 +97,14 @@ def process_feedback(
     # 3. Kalman gain
     K = compute_gain(pi_task, R)
 
-    # 4. Residual
+    # 4. Residual (surprise relative to the query/LO)
     e = compute_residual(y, query_emb, m_task)
 
-    # 5. Memory update
-    m_task_new = update_memory(m_task, K, e, query_emb)
+    # 5. Memory update (move toward/away from concept, not query)
+    # Using concept_emb as the update direction ensures mastery
+    # (derived from cos(m_task, concept_emb)) behaves correctly:
+    # success pulls memory toward concept, failure pushes it away.
+    m_task_new = update_memory(m_task, K, e, concept_emb)
 
     # 6. Perplexity update
     pi_task_new = update_perplexity(pi_task, K, q_task)

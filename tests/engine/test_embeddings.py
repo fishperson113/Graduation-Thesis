@@ -9,7 +9,11 @@ from student_modeling.engine.embeddings import EmbeddingService
 class TestEmbeddingService:
     @pytest.fixture(scope="class")
     def service(self):
-        return EmbeddingService(model_name="all-mpnet-base-v2")
+        from student_modeling.config import get_settings
+
+        settings = get_settings()
+        api_key = settings.huggingface_api_key.get_secret_value()
+        return EmbeddingService(api_key=api_key)
 
     def test_embed_returns_768_dim(self, service):
         vec = service.embed("Early Computing & Cryptography")
